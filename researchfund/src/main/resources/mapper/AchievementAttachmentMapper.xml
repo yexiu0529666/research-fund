@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vocational.researchfund.mapper.AchievementAttachmentMapper">
+
+    <!-- 批量插入附件 -->
+    <insert id="batchInsert">
+        INSERT INTO achievement_attachment(id, achievement_id, name, path, file_size, file_type, upload_time)
+        VALUES
+        <foreach collection="attachments" item="item" separator=",">
+            (#{item.id}, #{achievementId}, #{item.name}, #{item.path}, #{item.fileSize}, #{item.fileType}, NOW())
+        </foreach>
+    </insert>
+
+</mapper> 

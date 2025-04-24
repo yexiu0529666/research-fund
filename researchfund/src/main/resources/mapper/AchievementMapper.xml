@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vocational.researchfund.mapper.AchievementMapper">
+
+    <!-- 根据创建者ID查询成果奖励列表 -->
+    <select id="selectByCreatorId" resultType="com.vocational.researchfund.entity.Achievement">
+        SELECT a.* 
+        FROM achievement a
+        WHERE a.creator_id = #{creatorId} AND a.is_deleted = 0
+        <if test="params.title != null and params.title != ''">
+            AND a.title LIKE CONCAT('%', #{params.title}, '%')
+        </if>
+        <if test="params.type != null and params.type != ''">
+            AND a.type = #{params.type}
+        </if>
+        <if test="params.status != null and params.status != ''">
+            AND a.status = #{params.status}
+        </if>
+        <if test="params.projectId != null and params.projectId != ''">
+            AND a.project_id = #{params.projectId}
+        </if>
+        <if test="params.startDate != null and params.startDate != ''">
+            AND a.award_date &gt;= #{params.startDate}
+        </if>
+        <if test="params.endDate != null and params.endDate != ''">
+            AND a.award_date &lt;= #{params.endDate}
+        </if>
+        ORDER BY a.create_time DESC
+        LIMIT #{params.offset}, #{params.limit}
+    </select>
+    
+    <!-- 根据条件查询成果奖励列表 -->
+    <select id="selectByParams" resultType="com.vocational.researchfund.entity.Achievement">
+        SELECT a.* 
+        FROM achievement a
+        WHERE a.is_deleted = 0
+        <if test="params.title != null and params.title != ''">
+            AND a.title LIKE CONCAT('%', #{params.title}, '%')
+        </if>
+        <if test="params.type != null and params.type != ''">
+            AND a.type = #{params.type}
+        </if>
+        <if test="params.status != null and params.status != ''">
+            AND a.status = #{params.status}
+        </if>
+        <if test="params.projectId != null and params.projectId != ''">
+            AND a.project_id = #{params.projectId}
+        </if>
+        <if test="params.startDate != null and params.startDate != ''">
+            AND a.award_date &gt;= #{params.startDate}
+        </if>
+        <if test="params.endDate != null and params.endDate != ''">
+            AND a.award_date &lt;= #{params.endDate}
+        </if>
+        <if test="params.creatorId != null and params.creatorId != ''">
+            AND a.creator_id = #{params.creatorId}
+        </if>
+        ORDER BY a.create_time DESC
+        LIMIT #{params.offset}, #{params.limit}
+    </select>
+    
+    <!-- 根据创建者ID查询成果奖励数量 -->
+    <select id="countByCreatorId" resultType="int">
+        SELECT COUNT(1) 
+        FROM achievement a
+        WHERE a.creator_id = #{creatorId} AND a.is_deleted = 0
+        <if test="params.title != null and params.title != ''">
+            AND a.title LIKE CONCAT('%', #{params.title}, '%')
+        </if>
+        <if test="params.type != null and params.type != ''">
+            AND a.type = #{params.type}
+        </if>
+        <if test="params.status != null and params.status != ''">
+            AND a.status = #{params.status}
+        </if>
+        <if test="params.projectId != null and params.projectId != ''">
+            AND a.project_id = #{params.projectId}
+        </if>
+        <if test="params.startDate != null and params.startDate != ''">
+            AND a.award_date &gt;= #{params.startDate}
+        </if>
+        <if test="params.endDate != null and params.endDate != ''">
+            AND a.award_date &lt;= #{params.endDate}
+        </if>
+    </select>
+    
+    <!-- 根据条件查询成果奖励数量 -->
+    <select id="countByParams" resultType="int">
+        SELECT COUNT(1) 
+        FROM achievement a
+        WHERE a.is_deleted = 0
+        <if test="params.title != null and params.title != ''">
+            AND a.title LIKE CONCAT('%', #{params.title}, '%')
+        </if>
+        <if test="params.type != null and params.type != ''">
+            AND a.type = #{params.type}
+        </if>
+        <if test="params.status != null and params.status != ''">
+            AND a.status = #{params.status}
+        </if>
+        <if test="params.projectId != null and params.projectId != ''">
+            AND a.project_id = #{params.projectId}
+        </if>
+        <if test="params.startDate != null and params.startDate != ''">
+            AND a.award_date &gt;= #{params.startDate}
+        </if>
+        <if test="params.endDate != null and params.endDate != ''">
+            AND a.award_date &lt;= #{params.endDate}
+        </if>
+        <if test="params.creatorId != null and params.creatorId != ''">
+            AND a.creator_id = #{params.creatorId}
+        </if>
+    </select>
+
+    <!-- 按类型统计成果数量 -->
+    <select id="countByType" resultType="java.util.Map">
+        SELECT 
+            type, 
+            COUNT(1) as count
+        FROM achievement
+        WHERE is_deleted = 0
+        <if test="params.status != null and params.status != ''">
+            AND status = #{params.status}
+        </if>
+        GROUP BY type
+    </select>
+    
+    <!-- 按类型统计特定用户的成果数量 -->
+    <select id="countByTypeAndCreator" resultType="java.util.Map">
+        SELECT 
+            type, 
+            COUNT(1) as count
+        FROM achievement
+        WHERE creator_id = #{creatorId} AND is_deleted = 0
+        <if test="params.status != null and params.status != ''">
+            AND status = #{params.status}
+        </if>
+        GROUP BY type
+    </select>
+
+</mapper> 

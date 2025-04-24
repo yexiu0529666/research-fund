@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vocational.researchfund.mapper.AttachmentMapper">
+
+    <!-- 批量插入附件 -->
+    <insert id="batchInsert">
+        INSERT INTO expense_attachment(expense_id, name, url, file_size, file_type)
+        VALUES
+        <foreach collection="attachments" item="item" separator=",">
+            (#{expenseId}, #{item.name}, #{item.url}, #{item.fileSize}, #{item.fileType})
+        </foreach>
+    </insert>
+
+</mapper> 

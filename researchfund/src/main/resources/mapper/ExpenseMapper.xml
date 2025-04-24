@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vocational.researchfund.mapper.ExpenseMapper">
+
+<!-- 查询所有已支付的借款类型经费申请 -->
+<select id="selectPaidAdvanceExpenses" resultType="com.vocational.researchfund.dto.ExpenseDTO">
+    SELECT 
+        id, title, project_id, project_name, type, amount, apply_date, purpose, reason,
+        apply_user_id, apply_user_name, status, audit_user_id, audit_user_name, 
+        audit_time, audit_comment, category, create_time
+    FROM 
+        expense_apply 
+    WHERE 
+        status = 'paid' 
+        AND category = 'advance' 
+        AND deleted = 0
+</select>
+
+<!-- 查询所有待提交报销凭证的经费申请 -->
+<select id="selectReceiptPendingExpenses" resultType="com.vocational.researchfund.dto.ExpenseDTO">
+    SELECT 
+        e.id, e.title, e.project_id, e.project_name, e.type, e.amount, e.apply_date, 
+        e.purpose, e.reason, e.apply_user_id, e.apply_user_name, e.status, 
+        e.audit_user_id, e.audit_user_name, e.audit_time, e.audit_comment, 
+        e.category, e.create_time,
+        p.end_date as projectEndDate
+    FROM 
+        expense_apply e
+    JOIN 
+        project p ON e.project_id = p.id
+    WHERE 
+        e.status = 'receipt_pending' 
+        AND e.category = 'advance' 
+        AND e.deleted = 0
+</select>
+
+</mapper> 

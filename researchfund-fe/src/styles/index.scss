@@ -1,0 +1,204 @@
+/* 全局样式变量 */
+:root {
+  --primary-color: #409EFF;
+  --success-color: #67C23A;
+  --warning-color: #E6A23C;
+  --danger-color: #F56C6C;
+  --info-color: #909399;
+  
+  --bg-color: #f5f7fa;
+  --border-color: #EBEEF5;
+  --text-color: #303133;
+  --text-color-secondary: #606266;
+  --text-color-placeholder: #909399;
+}
+
+/* 清除默认样式 */
+body, h1, h2, h3, h4, h5, h6, p, ul, ol, li {
+  margin: 0;
+  padding: 0;
+}
+
+/* 基础样式 */
+body {
+  font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text-color);
+  background-color: var(--bg-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 通用容器样式 */
+.container {
+  width: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* 卡片容器样式 */
+.card-container {
+  background-color: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+/* 统一表格样式 */
+.el-table {
+  margin-top: 15px;
+  margin-bottom: 15px;
+}
+
+/* 统一表单样式 */
+.form-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.form-footer {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+/* 按钮间距 */
+.el-button + .el-button {
+  margin-left: 10px;
+}
+
+/* 筛选区样式 */
+.filter-container {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.03);
+}
+
+.filter-item {
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+/* 分页容器样式 */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+/* 状态标签颜色 */
+.status-pending {
+  color: var(--warning-color);
+}
+
+.status-approved {
+  color: var(--success-color);
+}
+
+.status-rejected {
+  color: var(--danger-color);
+}
+
+.status-processing {
+  color: var(--primary-color);
+}
+
+/* 文本截断和省略 */
+.ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 文本对齐 */
+.text-left {
+  text-align: left;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+/* 弹性布局工具类 */
+.flex {
+  display: flex;
+}
+
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 间距工具类 */
+.mt-10 {
+  margin-top: 10px;
+}
+
+.mb-10 {
+  margin-bottom: 10px;
+}
+
+.ml-10 {
+  margin-left: 10px;
+}
+
+.mr-10 {
+  margin-right: 10px;
+}
+
+.p-20 {
+  padding: 20px;
+}
+
+/* 修改element-plus默认样式 */
+.el-card {
+  margin-bottom: 20px;
+}
+
+.el-card__header {
+  padding: 15px 20px;
+  font-weight: bold;
+}
+
+.el-table th {
+  background-color: #f5f7fa !important;
+}
+
+.el-tag {
+  margin-right: 5px;
+}
+
+/* 响应式工具类 */
+@media (max-width: 768px) {
+  .hide-sm {
+    display: none;
+  }
+  
+  .filter-container {
+    flex-direction: column;
+  }
+  
+  .filter-item {
+    width: 100%;
+    margin-right: 0;
+  }
+} 
