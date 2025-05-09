@@ -24,6 +24,14 @@
           </el-select>
         </el-form-item>
         
+        <el-form-item label="经费来源" prop="fundingSources">
+          <el-select v-model="projectForm.fundingSources" multiple placeholder="请选择经费来源（可多选）">
+            <el-option label="财政经费" value="fiscal" />
+            <el-option label="校配套经费" value="school" />
+            <el-option label="其他经费" value="other" />
+          </el-select>
+        </el-form-item>
+        
         <el-form-item label="负责人" prop="leaderName">
           <el-input v-model="projectForm.leaderName" placeholder="请输入负责人姓名" />
         </el-form-item>
@@ -41,18 +49,60 @@
           />
         </el-form-item>
         
-        <el-form-item label="项目预算" prop="budget">
-          <el-input-number
-            v-model="projectForm.budget"
-            :min="0"
-            :precision="2"
-            :step="1000"
-            :controls="false"
-            style="width: 200px"
-          />
-          <span class="form-tips">单位：元</span>
+        <!-- 预算科目 -->
+        <el-form-item label="预算科目" prop="budgetItems">
+          <div class="budget-container">
+            <div v-for="(item, index) in projectForm.budgetItems" :key="index" class="budget-item">
+              <el-row :gutter="10">
+                <el-col :span="10">
+                  <el-select
+                    v-model="item.category"
+                    placeholder="选择科目名称"
+                    style="width: 100%;"
+                  >
+                    <el-option label="设备费" value="设备费" />
+                    <el-option label="材料费" value="材料费" />
+                    <el-option label="测试化验费" value="测试化验费" />
+                    <el-option label="差旅费" value="差旅费" />
+                    <el-option label="会议费" value="会议费" />
+                    <el-option label="劳务费" value="劳务费" />
+                    <el-option label="专家咨询费" value="专家咨询费" />
+                    <el-option label="其他费用" value="其他费用" />
+                  </el-select>
+                </el-col>
+                <el-col :span="10">
+                  <el-input-number
+                    v-model="item.amount"
+                    :min="0"
+                    :precision="2"
+                    :step="1000"
+                    :controls="false"
+                    style="width: 100%"
+                    placeholder="金额"
+                  />
+                </el-col>
+                <el-col :span="4">
+                  <el-button 
+                    type="danger" 
+                    circle 
+                    icon="Delete" 
+                    size="small"
+                    @click="removeBudgetItem(index)"
+                  />
+                </el-col>
+              </el-row>
+            </div>
+            <div class="budget-actions">
+              <el-button type="primary" plain size="small" @click="addBudgetItem">
+                <el-icon><Plus /></el-icon>添加科目
+              </el-button>
+            </div>
+            <div class="budget-total">
+              总预算：{{ formatCurrency(totalBudget) }}
+            </div>
+          </div>
         </el-form-item>
-
+        
         <!-- 项目团队成员 -->
         <el-form-item label="项目团队" prop="team" :error="teamError">
     <div class="team-container">
@@ -163,7 +213,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { createProject } from '@/api/project'
@@ -185,15 +235,43 @@ const fileSize = ref(null)
 const projectForm = reactive({
   name: '',
   type: '',
+  fundingSources: [],
   leaderName: userStore.name || '', // 默认填充当前用户名
   projectPeriod: null,
-  budget: 0,
+  budgetItems: [{ category: '', amount: 0 }], // 预算科目
   description: '',
   researchContent: '',
   expectedResults: '',
   team: [{ name: '', role: '' }], // 项目团队成员
   filePath: '' // 文件路径
 })
+
+// 计算总预算
+const totalBudget = computed(() => {
+  return projectForm.budgetItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+})
+
+// 格式化货币
+const formatCurrency = (value) => {
+  if (!value && value !== 0) return '¥0.00'
+  return '¥' + Number(value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+// 添加预算科目
+function addBudgetItem() {
+  projectForm.budgetItems.push({
+    category: '',
+    amount: 0
+  })
+}
+
+// 移除预算科目
+function removeBudgetItem(index) {
+  projectForm.budgetItems.splice(index, 1)
+  if (projectForm.budgetItems.length === 0) {
+    addBudgetItem()
+  }
+}
 
 // 表单验证规则
 const rules = {
@@ -204,14 +282,40 @@ const rules = {
   type: [
     { required: true, message: '请选择项目类型', trigger: 'change' }
   ],
+  fundingSources: [
+    { required: true, message: '请选择经费来源', trigger: 'change' }
+  ],
   leaderName: [
     { required: true, message: '请输入负责人姓名', trigger: 'blur' }
   ],
   projectPeriod: [
     { required: true, message: '请选择项目周期', trigger: 'change' }
   ],
-  budget: [
-    { required: true, message: '请输入项目预算', trigger: 'blur' }
+  budgetItems: [
+    { 
+      required: true,
+      validator: (rule, value, callback) => {
+        if (!value || value.length === 0) {
+          callback(new Error('请至少添加一个预算科目'))
+          return
+        }
+        
+        for (let i = 0; i < value.length; i++) {
+          const item = value[i]
+          if (!item.category) {
+            callback(new Error('请填写所有预算科目的名称'))
+            return
+          }
+          if (!item.amount) {
+            callback(new Error('请填写所有预算科目的金额'))
+            return
+          }
+        }
+        
+        callback()
+      }, 
+      trigger: 'change' 
+    }
   ],
   description: [
     { required: true, message: '请输入项目简介', trigger: 'blur' }
@@ -424,6 +528,7 @@ const submitForm = async () => {
           ...projectForm,
           startDate,
           endDate,
+          budget: totalBudget.value, // 使用计算的总预算
           usedBudget: 0,
           status: 'planning',
           auditStatus: 'pending',
@@ -452,10 +557,12 @@ const submitForm = async () => {
     }
   });
 };
+
 // 重置表单
 const resetForm = () => {
   projectFormRef.value?.resetFields()
   projectForm.team = []
+  projectForm.budgetItems = [{ category: '', amount: 0 }]
   fileList.value = []
   projectFile.value = null
   projectForm.filePath = ''
@@ -548,5 +655,33 @@ const goBack = () => {
   color: #909399;
   font-size: 12px;
   margin-left: 10px;
+}
+
+.budget-container {
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 15px;
+  background-color: #f5f7fa;
+}
+
+.budget-item {
+  margin-bottom: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.budget-actions {
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+}
+
+.budget-total {
+  margin-top: 15px;
+  text-align: right;
+  font-weight: bold;
+  color: #409EFF;
 }
 </style> 

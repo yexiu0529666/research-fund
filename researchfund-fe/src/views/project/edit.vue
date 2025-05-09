@@ -24,6 +24,14 @@
           </el-select>
         </el-form-item>
         
+        <el-form-item label="经费来源" prop="fundingSources">
+          <el-select v-model="projectForm.fundingSources" multiple placeholder="请选择经费来源（可多选）">
+            <el-option label="财政经费" value="fiscal" />
+            <el-option label="校配套经费" value="school" />
+            <el-option label="其他经费" value="other" />
+          </el-select>
+        </el-form-item>
+        
         <el-form-item label="负责人" prop="leaderName">
           <el-input v-model="projectForm.leaderName" placeholder="请输入负责人姓名" />
         </el-form-item>
@@ -41,16 +49,58 @@
           />
         </el-form-item>
         
-        <el-form-item label="项目预算" prop="budget">
-          <el-input-number
-            v-model="projectForm.budget"
-            :min="0"
-            :precision="2"
-            :step="1000"
-            :controls="false"
-            style="width: 200px"
-          />
-          <span class="form-tips">单位：元</span>
+        <!-- 预算科目 -->
+        <el-form-item label="预算科目" prop="budgetItems">
+          <div class="budget-container">
+            <div v-for="(item, index) in projectForm.budgetItems" :key="index" class="budget-item">
+              <el-row :gutter="10">
+                <el-col :span="10">
+                  <el-select
+                    v-model="item.category"
+                    placeholder="选择科目名称"
+                    style="width: 100%;"
+                  >
+                    <el-option label="设备费" value="设备费" />
+                    <el-option label="材料费" value="材料费" />
+                    <el-option label="测试化验费" value="测试化验费" />
+                    <el-option label="差旅费" value="差旅费" />
+                    <el-option label="会议费" value="会议费" />
+                    <el-option label="劳务费" value="劳务费" />
+                    <el-option label="专家咨询费" value="专家咨询费" />
+                    <el-option label="其他费用" value="其他费用" />
+                  </el-select>
+                </el-col>
+                <el-col :span="10">
+                  <el-input-number
+                    v-model="item.amount"
+                    :min="0"
+                    :precision="2"
+                    :step="1000"
+                    :controls="false"
+                    style="width: 100%"
+                    placeholder="金额"
+                  />
+                </el-col>
+                <el-col :span="4">
+                  <el-button 
+                    type="danger" 
+                    circle 
+                    icon="Delete" 
+                    size="small"
+                    @click="removeBudgetItem(index)"
+                  />
+                </el-col>
+              </el-row>
+            </div>
+            <div class="budget-actions">
+              <el-button type="primary" plain size="small" @click="addBudgetItem">
+                <el-icon><Plus /></el-icon>添加科目
+              </el-button>
+            </div>
+            <div class="budget-total">
+              总预算：{{ formatCurrency(totalBudget) }}
+            </div>
+          </div>
         </el-form-item>
 
         <!-- 项目团队成员 -->
@@ -167,7 +217,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
 import { getProjectDetail, updateProject } from '@/api/project'
@@ -193,6 +243,7 @@ const originalFileName = ref('') // 保存原始文件名
 const projectForm = reactive({
   name: '',
   type: '',
+  fundingSources: [],
   leaderName: '',
   projectPeriod: null,
   budget: 0,
@@ -203,8 +254,36 @@ const projectForm = reactive({
   researchContent: '',
   expectedResults: '',
   team: [], // 项目团队成员
-  filePath: '' // 文件路径
+  filePath: '', // 文件路径
+  budgetItems: [{ category: '', amount: 0 }] // 预算科目
 })
+
+// 计算总预算
+const totalBudget = computed(() => {
+  return projectForm.budgetItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+})
+
+// 格式化货币
+const formatCurrency = (value) => {
+  if (!value && value !== 0) return '¥0.00'
+  return '¥' + Number(value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+// 添加预算科目
+function addBudgetItem() {
+  projectForm.budgetItems.push({
+    category: '',
+    amount: 0
+  })
+}
+
+// 移除预算科目
+function removeBudgetItem(index) {
+  projectForm.budgetItems.splice(index, 1)
+  if (projectForm.budgetItems.length === 0) {
+    addBudgetItem()
+  }
+}
 
 // 表单验证规则
 const rules = {
@@ -215,14 +294,40 @@ const rules = {
   type: [
     { required: true, message: '请选择项目类型', trigger: 'change' }
   ],
+  fundingSources: [
+    { required: true, message: '请选择经费来源', trigger: 'change' }
+  ],
   leaderName: [
     { required: true, message: '请输入负责人姓名', trigger: 'blur' }
   ],
   projectPeriod: [
     { required: true, message: '请选择项目周期', trigger: 'change' }
   ],
-  budget: [
-    { required: true, message: '请输入项目预算', trigger: 'blur' }
+  budgetItems: [
+    { 
+      required: true,
+      validator: (rule, value, callback) => {
+        if (!value || value.length === 0) {
+          callback(new Error('请至少添加一个预算科目'))
+          return
+        }
+        
+        for (let i = 0; i < value.length; i++) {
+          const item = value[i]
+          if (!item.category) {
+            callback(new Error('请填写所有预算科目的名称'))
+            return
+          }
+          if (!item.amount) {
+            callback(new Error('请填写所有预算科目的金额'))
+            return
+          }
+        }
+        
+        callback()
+      }, 
+      trigger: 'change' 
+    }
   ],
   description: [
     { required: true, message: '请输入项目简介', trigger: 'blur' }
@@ -404,26 +509,10 @@ const disabledDate = (time) => {
 const submitForm = async () => {
   if (!projectFormRef.value) return;
   
-  // 表单验证
-  await projectFormRef.value.validate(async (valid, fields) => {
+  projectFormRef.value.validate(async (valid) => {
     if (!valid) {
-      console.log('表单验证失败:', fields);
-      return false;
-    }
-    
-    // 验证团队成员
-    if (!validateTeamMembers()) {
-      return false;
-    }
-    
-    // 如果有新文件需要上传
-    if (projectFile.value && !projectForm.filePath) {
-      const filePath = await handleFileUpload();
-      if (!filePath) {
-        ElMessage.error('文件上传失败，请重试');
-        return false;
-      }
-      projectForm.filePath = filePath;
+      ElMessage.error('请完善表单信息');
+      return;
     }
     
     submitLoading.value = true;
@@ -437,7 +526,7 @@ const submitForm = async () => {
         leaderName: projectForm.leaderName,
         startDate: projectForm.projectPeriod[0],
         endDate: projectForm.projectPeriod[1],
-        budget: projectForm.budget,
+        budget: totalBudget.value, // 使用计算的总预算
         usedBudget: projectForm.usedBudget,
         status: projectForm.status,
         auditStatus: projectForm.auditStatus,
@@ -445,7 +534,9 @@ const submitForm = async () => {
         researchContent: projectForm.researchContent,
         expectedResults: projectForm.expectedResults,
         filePath: projectForm.filePath,
-        team: projectForm.team // 团队成员
+        team: projectForm.team, // 团队成员
+        fundingSources: projectForm.fundingSources,
+        budgetItems: projectForm.budgetItems // 添加预算科目数据
       };
       
       // 调用更新API
@@ -479,6 +570,16 @@ const getProjectInfo = async (id) => {
       // 填充表单数据
       projectForm.name = projectData.name;
       projectForm.type = projectData.type;
+      
+      // 处理经费来源，兼容新旧版本
+      if (projectData.fundingSources && projectData.fundingSources.length > 0) {
+        projectForm.fundingSources = projectData.fundingSources;
+      } else if (projectData.fundingSource) {
+        projectForm.fundingSources = [projectData.fundingSource];
+      } else {
+        projectForm.fundingSources = [];
+      }
+      
       projectForm.leaderName = projectData.leaderName;
       projectForm.projectPeriod = [projectData.startDate, projectData.endDate];
       projectForm.budget = projectData.budget;
@@ -499,6 +600,17 @@ const getProjectInfo = async (id) => {
       } else {
         // 如果没有团队成员，初始添加一个空成员
         addMember();
+      }
+      
+      // 设置预算科目
+      if (projectData.budgetItems && projectData.budgetItems.length > 0) {
+        projectForm.budgetItems = projectData.budgetItems;
+      } else {
+        // 如果没有预算科目数据，根据总预算创建一个默认的"其他费用"科目
+        projectForm.budgetItems = [{
+          category: '其他费用',
+          amount: projectData.budget
+        }];
       }
     } else {
       ElMessage.error('获取项目信息失败: ' + (response.message || '未知错误'));
@@ -614,5 +726,29 @@ onMounted(() => {
 
 .upload-status .el-icon {
   margin-right: 5px;
+}
+
+.budget-container {
+  border: 1px solid #EBEEF5;
+  border-radius: 4px;
+  padding: 10px;
+  background-color: #F5F7FA;
+}
+
+.budget-item {
+  margin-bottom: 10px;
+}
+
+.budget-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.budget-total {
+  margin-top: 15px;
+  font-weight: bold;
+  text-align: right;
+  color: #409EFF;
 }
 </style> 

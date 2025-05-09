@@ -33,6 +33,17 @@ public class ProjectDTO {
     private String type;
 
     /**
+     * 经费来源：fiscal-财政经费，school-校配套经费，other-其他经费
+     * 兼容旧版本，新版本建议使用 fundingSources 字段
+     */
+    private String fundingSource;
+    
+    /**
+     * 经费来源列表
+     */
+    private List<String> fundingSources;
+
+    /**
      * 项目负责人ID
      */
     private Long leaderId;
@@ -111,21 +122,21 @@ public class ProjectDTO {
      * 结题审核意见
      */
     private String completionAuditComment;
-
+    
     /**
      * 结题报告提交时间
      */
     private LocalDate completionReportSubmitTime;
-
+    
     /**
-     * 项目团队
+     * 项目团队成员
      */
     private List<TeamMemberDTO> team;
-
+    
     /**
-     * 项目里程碑
+     * 项目预算科目
      */
-    private List<MilestoneDTO> milestones;
+    private List<BudgetItemDTO> budgetItems;
 
     /**
      * 团队成员DTO
@@ -153,5 +164,18 @@ public class ProjectDTO {
         private LocalDate date;
         private String status;
         private String description;
+    }
+
+    /**
+     * 预算科目DTO
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class BudgetItemDTO {
+        private Long id;
+        private String category;
+        private BigDecimal amount;
     }
 } 

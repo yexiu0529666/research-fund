@@ -96,6 +96,21 @@ export function deleteExpense(id) {
 }
 
 /**
+ * 获取项目的经费支出列表
+ * @param {String|Number} projectId - 项目ID
+ * @returns {Promise}
+ */
+export function getExpenseByProject(projectId) {
+  return request({
+    url: '/api/expenses/project',
+    method: 'get',
+    params: {
+      projectId
+    }
+  })
+}
+
+/**
  * 上传附件
  * @param {File} file - 文件对象
  * @returns {Promise}

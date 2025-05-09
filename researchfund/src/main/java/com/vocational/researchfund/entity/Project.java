@@ -30,6 +30,11 @@ public class Project extends BaseEntity {
     private String type;
 
     /**
+     * 经费来源：fiscal-财政经费，school-校配套经费，other-其他经费
+     */
+    private String fundingSource;
+
+    /**
      * 项目负责人ID
      */
     private Long leaderId;

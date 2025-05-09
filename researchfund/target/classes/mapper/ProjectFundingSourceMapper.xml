@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.vocational.researchfund.repository.ProjectFundingSourceRepository">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.vocational.researchfund.entity.ProjectFundingSource">
+        <id column="id" property="id"/>
+        <result column="project_id" property="projectId"/>
+        <result column="source" property="source"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+        <result column="remark" property="remark"/>
+    </resultMap>
+
+    <!-- 根据项目ID查询经费来源列表 -->
+    <select id="findByProjectId" resultMap="BaseResultMap">
+        SELECT *
+        FROM project_funding_source
+        WHERE project_id = #{projectId}
+          AND deleted = 0
+    </select>
+
+    <!-- 批量插入项目经费来源 -->
+    <insert id="batchInsert">
+        INSERT INTO project_funding_source (project_id, source, create_by)
+        VALUES
+        <foreach collection="fundingSources" item="source" separator=",">
+            (#{projectId}, #{source}, #{createBy})
+        </foreach>
+    </insert>
+
+    <!-- 根据项目ID删除经费来源 -->
+    <delete id="deleteByProjectId">
+        UPDATE project_funding_source
+        SET deleted = 1
+        WHERE project_id = #{projectId}
+    </delete>
+
+</mapper> 

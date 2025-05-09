@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -77,11 +78,8 @@ public class ExpenseServiceImpl implements ExpenseService {
                 ProjectDTO project = projectService.getProjectById(expenseDTO.getProjectId());
                 expenseDTO.setProjectName(project.getName());
                 
-                // 检查项目剩余预算是否足够
-                BigDecimal remainingBudget = project.getBudget().subtract(project.getUsedBudget());
-                if (expenseDTO.getAmount().compareTo(remainingBudget) > 0) {
-                    throw new RuntimeException("申请金额超过项目剩余预算，无法申请。剩余预算：" + remainingBudget);
-                }
+                // 检查申请的经费类型是否在项目预算科目中
+                validateExpenseTypeAndBudget(project, expenseDTO.getType(), expenseDTO.getAmount(), null);
             } catch (Exception e) {
                 throw new RuntimeException("申请经费失败， " + e.getMessage());
             }
@@ -140,45 +138,27 @@ public class ExpenseServiceImpl implements ExpenseService {
         expenseDTO.setStatus(existingExpense.getStatus());
         
         
-        // 如果更新了项目ID或金额，需要重新检查项目剩余预算
-        if ((expenseDTO.getProjectId() != null && !expenseDTO.getProjectId().equals(existingExpense.getProjectId())) || 
-            (expenseDTO.getAmount() != null && expenseDTO.getAmount().compareTo(existingExpense.getAmount()) > 0)) {
-            
+        // 如果更新了项目ID、经费类型或金额，需要重新检查项目预算
+        boolean projectChanged = expenseDTO.getProjectId() != null && !expenseDTO.getProjectId().equals(existingExpense.getProjectId());
+        boolean typeChanged = expenseDTO.getType() != null && !expenseDTO.getType().equals(existingExpense.getType());
+        boolean amountChanged = expenseDTO.getAmount() != null && expenseDTO.getAmount().compareTo(existingExpense.getAmount()) != 0;
+        
+        if (projectChanged || typeChanged || amountChanged) {
             try {
-                ProjectDTO project = projectService.getProjectById(expenseDTO.getProjectId() != null ? 
-                                                                 expenseDTO.getProjectId() : 
-                                                                 existingExpense.getProjectId());
+                Long projectId = expenseDTO.getProjectId() != null ? expenseDTO.getProjectId() : existingExpense.getProjectId();
+                String type = expenseDTO.getType() != null ? expenseDTO.getType() : existingExpense.getType();
+                BigDecimal amount = expenseDTO.getAmount() != null ? expenseDTO.getAmount() : existingExpense.getAmount();
+                
+                ProjectDTO project = projectService.getProjectById(projectId);
                 
                 // 设置项目名称
-                if (expenseDTO.getProjectId() != null && 
-                    (!expenseDTO.getProjectId().equals(existingExpense.getProjectId()) || 
-                    expenseDTO.getProjectName() == null || 
-                    expenseDTO.getProjectName().isEmpty())) {
+                if (projectChanged || expenseDTO.getProjectName() == null || expenseDTO.getProjectName().isEmpty()) {
                     expenseDTO.setProjectName(project.getName());
                 }
                 
-                // 计算实际增加的金额（如果是同一个项目且金额增加了）
-                BigDecimal additionalAmount = BigDecimal.ZERO;
-                if (expenseDTO.getAmount() != null && existingExpense.getProjectId().equals(expenseDTO.getProjectId())) {
-                    additionalAmount = expenseDTO.getAmount().subtract(existingExpense.getAmount());
-                    if (additionalAmount.compareTo(BigDecimal.ZERO) < 0) {
-                        additionalAmount = BigDecimal.ZERO; // 如果金额减少，不需要检查预算
-                    }
-                } else if (expenseDTO.getAmount() != null) {
-                    // 如果项目ID变了，则需要检查新项目的全部金额
-                    additionalAmount = expenseDTO.getAmount();
-                } else {
-                    // 使用原来的金额
-                    additionalAmount = existingExpense.getAmount();
-                }
-                
-                // 检查项目剩余预算是否足够
-                if (additionalAmount.compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal remainingBudget = project.getBudget().subtract(project.getUsedBudget());
-                    if (additionalAmount.compareTo(remainingBudget) > 0) {
-                        throw new RuntimeException("申请金额超过项目剩余预算，无法修改。剩余预算：" + remainingBudget);
-                    }
-                }
+                // 检查申请的经费类型是否在项目预算科目中，并验证预算是否足够
+                validateExpenseTypeAndBudget(project, type, amount, 
+                        (!projectChanged && !typeChanged) ? existingExpense : null);
             } catch (Exception e) {
                 throw new RuntimeException("修改经费申请失败， " + e.getMessage());
             }
@@ -204,6 +184,93 @@ public class ExpenseServiceImpl implements ExpenseService {
         }
         
         return getExpenseById(id);
+    }
+    
+    /**
+     * 验证经费申请类型和金额是否符合项目预算要求
+     * @param project 项目
+     * @param expenseType 申请类型
+     * @param amount 申请金额
+     * @param existingExpense 已存在的经费申请（用于更新时计算差额）
+     * @throws RuntimeException 如果类型不符合或超出预算时抛出异常
+     */
+    private void validateExpenseTypeAndBudget(ProjectDTO project, String expenseType, BigDecimal amount, 
+                                             ExpenseDTO existingExpense) {
+        if (project == null || expenseType == null || amount == null) {
+            throw new RuntimeException("参数不完整，无法验证预算");
+        }
+        
+        // 获取项目的所有预算科目
+        List<ProjectDTO.BudgetItemDTO> budgetItems = project.getBudgetItems();
+        if (budgetItems == null || budgetItems.isEmpty()) {
+            throw new RuntimeException("项目未设置预算科目，无法申请经费");
+        }
+        
+        // 获取项目已使用的经费（按类型）
+        List<Map<String, Object>> expenseStats = expenseMapper.getExpenseStatsByProject(project.getId());
+        Map<String, BigDecimal> usedAmountByType = new HashMap<>();
+        
+        // 将经费使用情况转换为Map便于查找
+        if (expenseStats != null) {
+            for (Map<String, Object> stat : expenseStats) {
+                String type = (String) stat.get("type");
+                BigDecimal usedAmount = (BigDecimal) stat.get("amount");
+                if (type != null && usedAmount != null) {
+                    usedAmountByType.put(type, usedAmount);
+                }
+            }
+        }
+        
+        // 找到与申请类型对应的预算科目
+        String categoryName = null;
+        BigDecimal budgetAmount = null;
+        
+        // 经费类型与预算科目名称的映射关系
+        Map<String, String> typeToCategoryMap = new HashMap<>();
+        typeToCategoryMap.put("equipment", "设备费");
+        typeToCategoryMap.put("material", "材料费");
+        typeToCategoryMap.put("test", "测试化验费");
+        typeToCategoryMap.put("travel", "差旅费");
+        typeToCategoryMap.put("meeting", "会议费");
+        typeToCategoryMap.put("labor", "劳务费");
+        typeToCategoryMap.put("consultation", "专家咨询费");
+        typeToCategoryMap.put("other", "其他费用");
+        
+        String expectedCategory = typeToCategoryMap.get(expenseType);
+        
+        for (ProjectDTO.BudgetItemDTO item : budgetItems) {
+            if (item.getCategory().equals(expectedCategory)) {
+                categoryName = item.getCategory();
+                budgetAmount = item.getAmount();
+                break;
+            }
+        }
+        
+        if (categoryName == null || budgetAmount == null) {
+            throw new RuntimeException("申请的经费类型 [" + expenseType + "] 不在项目预算科目中，请选择项目预算中已有的科目");
+        }
+        
+        // 计算已使用的预算
+        BigDecimal usedAmount = usedAmountByType.getOrDefault(expenseType, BigDecimal.ZERO);
+        
+        // 如果是更新，且类型未变，则需要减去原有申请的金额
+        if (existingExpense != null && expenseType.equals(existingExpense.getType())) {
+            usedAmount = usedAmount.subtract(existingExpense.getAmount());
+        }
+        
+        // 计算剩余预算和申请后的使用预算
+        BigDecimal remainingBudget = budgetAmount.subtract(usedAmount);
+        BigDecimal newUsedAmount = usedAmount.add(amount);
+        
+        // 检查是否超出预算
+        if (amount.compareTo(remainingBudget) > 0) {
+            throw new RuntimeException("申请金额 [" + amount + "] 超过项目预算科目 [" + categoryName + "] 的剩余预算 [" + remainingBudget + "]");
+        }
+        
+        // 检查是否超过总预算
+        if (newUsedAmount.compareTo(budgetAmount) > 0) {
+            throw new RuntimeException("申请后该科目总使用金额 [" + newUsedAmount + "] 将超过预算金额 [" + budgetAmount + "]");
+        }
     }
     
     @Override
@@ -562,5 +629,20 @@ public class ExpenseServiceImpl implements ExpenseService {
         
         // 返回分页结果
         return new PageDTO<>(pagedExpenses, total, pageNum, pageSize);
+    }
+
+    /**
+     * 获取项目的经费支出列表
+     * @param projectId 项目ID
+     * @return 经费支出列表
+     */
+    @Override
+    public List<ExpenseDTO> getExpensesByProjectId(Long projectId) {
+        if (projectId == null) {
+            throw new RuntimeException("项目ID不能为空");
+        }
+        
+        // 调用Mapper查询数据库
+        return expenseMapper.selectByProjectId(projectId);
     }
 } 

@@ -3,9 +3,17 @@ package com.vocational.researchfund.service.impl;
 
 import com.vocational.researchfund.dto.PageDTO;
 import com.vocational.researchfund.dto.ProjectDTO;
+import com.vocational.researchfund.dto.ProjectDTO.BudgetItemDTO;
+import com.vocational.researchfund.dto.ProjectDTO.TeamMemberDTO;
+import com.vocational.researchfund.entity.Project;
+import com.vocational.researchfund.entity.ProjectBudgetItem;
+import com.vocational.researchfund.entity.ProjectFundingSource;
 import com.vocational.researchfund.entity.User;
+import com.vocational.researchfund.exception.BusinessException;
+import com.vocational.researchfund.mapper.ProjectBudgetItemMapper;
 import com.vocational.researchfund.mapper.ProjectMapper;
 import com.vocational.researchfund.mapper.ProjectTeamMemberMapper;
+import com.vocational.researchfund.repository.ProjectFundingSourceRepository;
 import com.vocational.researchfund.service.ProjectService;
 import com.vocational.researchfund.service.UserService;
 import com.vocational.researchfund.utils.SecurityUtils;
@@ -15,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -32,20 +41,57 @@ public class ProjectServiceImpl implements ProjectService {
     private ProjectTeamMemberMapper projectTeamMemberMapper;
     
     @Autowired
+    private ProjectBudgetItemMapper projectBudgetItemMapper;
+    
+    @Autowired
+    private ProjectFundingSourceRepository projectFundingSourceRepository;
+    
+    @Autowired
     private UserService userService;
 
     @Override
     public ProjectDTO getProjectById(Long id) {
-        // 调用Mapper查询数据库
-        ProjectDTO project = projectMapper.selectById(id);
-        if (project == null) {
-            throw new RuntimeException("项目不存在");
+        if (id == null) {
+            throw new BusinessException("项目ID不能为空");
         }
         
-        // 获取项目团队成员
-        project.setTeam(projectTeamMemberMapper.selectByProjectId(id));
+        // 查询项目基本信息
+        ProjectDTO projectDTO = projectMapper.selectById(id);
         
-        return project;
+        if (projectDTO == null) {
+            throw new BusinessException("项目不存在");
+        }
+        
+        // 查询项目团队成员
+        List<ProjectDTO.TeamMemberDTO> teamMembers = projectTeamMemberMapper.selectByProjectId(id);
+        projectDTO.setTeam(teamMembers);
+        
+        // 查询项目预算科目
+        List<ProjectBudgetItem> budgetItems = projectBudgetItemMapper.selectByProjectId(id);
+        if (budgetItems != null && !budgetItems.isEmpty()) {
+            projectDTO.setBudgetItems(budgetItems.stream()
+                    .map(item -> {
+                        ProjectDTO.BudgetItemDTO dto = new ProjectDTO.BudgetItemDTO();
+                        dto.setId(item.getId());
+                        dto.setCategory(item.getCategory());
+                        dto.setAmount(item.getAmount());
+                        return dto;
+                    })
+                    .collect(Collectors.toList()));
+        }
+        
+        // 查询项目经费来源
+        List<ProjectFundingSource> fundingSources = projectFundingSourceRepository.findByProjectId(id);
+        if (fundingSources != null && !fundingSources.isEmpty()) {
+            projectDTO.setFundingSources(fundingSources.stream()
+                    .map(ProjectFundingSource::getSource)
+                    .collect(Collectors.toList()));
+        } else if (projectDTO.getFundingSource() != null) {
+            // 兼容旧数据，如果没有查到多个经费来源，但有单个经费来源，则将其转换为列表
+            projectDTO.setFundingSources(Collections.singletonList(projectDTO.getFundingSource()));
+        }
+        
+        return projectDTO;
     }
 
     @Override
@@ -105,16 +151,50 @@ public class ProjectServiceImpl implements ProjectService {
             projectDTO.setUsedBudget(BigDecimal.ZERO);
         }
         
+        // 处理经费来源，保持向下兼容性
+        if (projectDTO.getFundingSources() != null && !projectDTO.getFundingSources().isEmpty()) {
+            // 使用第一个经费来源作为主经费来源，保持向下兼容
+            String fundingSources = String.join(",", projectDTO.getFundingSources());
+            projectDTO.setFundingSource(fundingSources);
+        }
+        
         // 插入数据库
         int rows = projectMapper.insert(projectDTO);
         
         System.out.println("项目创建结果: " + (rows > 0 ? "成功" : "失败"));
         System.out.println("生成的项目ID: " + projectDTO.getId());
         
+        // 保存多个经费来源
+        if (projectDTO.getFundingSources() != null && projectDTO.getFundingSources().size() > 0) {
+            projectFundingSourceRepository.batchInsert(
+                projectDTO.getId(), 
+                projectDTO.getFundingSources(),
+                SecurityUtils.getCurrentUserId()
+            );
+        }
+        
         // 保存项目团队成员
         if (projectDTO.getTeam() != null && !projectDTO.getTeam().isEmpty()) {
             int teamRows = projectTeamMemberMapper.batchInsert(projectDTO.getTeam(), projectDTO.getId());
             System.out.println("保存项目团队成员数量: " + teamRows);
+        }
+        
+        // 保存项目预算科目
+        if (projectDTO.getBudgetItems() != null && !projectDTO.getBudgetItems().isEmpty()) {
+            List<ProjectBudgetItem> budgetItems = projectDTO.getBudgetItems().stream()
+                    .map(dto -> {
+                        ProjectBudgetItem item = new ProjectBudgetItem();
+                        item.setProjectId(projectDTO.getId());
+                        item.setCategory(dto.getCategory());
+                        item.setAmount(dto.getAmount());
+                        item.setCreateBy(SecurityUtils.getCurrentUserId());
+                        item.setUpdateBy(SecurityUtils.getCurrentUserId());
+                        item.setDeleted(0);
+                        return item;
+                    })
+                    .collect(Collectors.toList());
+            int budgetRows = projectBudgetItemMapper.batchInsert(budgetItems);
+            System.out.println("保存项目预算科目数量: " + budgetRows);
         }
         
         return projectDTO;
@@ -133,9 +213,31 @@ public class ProjectServiceImpl implements ProjectService {
         projectDTO.setLeaderId(existingProject.getLeaderId());
         projectDTO.setLeaderName(existingProject.getLeaderName());
         projectDTO.setAuditStatus(existingProject.getAuditStatus());
+        projectDTO.setUsedBudget(existingProject.getUsedBudget());
+        
+        // 处理经费来源，保持向下兼容性
+        if (projectDTO.getFundingSources() != null && !projectDTO.getFundingSources().isEmpty()) {
+            // 使用第一个经费来源作为主经费来源，保持向下兼容
+            projectDTO.setFundingSource(projectDTO.getFundingSources().get(0));
+        }
         
         // 更新数据库
         projectMapper.update(projectDTO);
+        
+        // 更新多个经费来源
+        if (projectDTO.getFundingSources() != null) {
+            // 先删除原有经费来源
+            projectFundingSourceRepository.deleteByProjectId(id);
+            
+            // 再添加新经费来源
+            if (!projectDTO.getFundingSources().isEmpty()) {
+                projectFundingSourceRepository.batchInsert(
+                    id, 
+                    projectDTO.getFundingSources(),
+                    SecurityUtils.getCurrentUserId()
+                );
+            }
+        }
         
         // 更新项目团队成员
         if (projectDTO.getTeam() != null) {
@@ -145,6 +247,29 @@ public class ProjectServiceImpl implements ProjectService {
             // 再添加新成员
             if (!projectDTO.getTeam().isEmpty()) {
                 projectTeamMemberMapper.batchInsert(projectDTO.getTeam(), id);
+            }
+        }
+        
+        // 更新项目预算科目
+        if (projectDTO.getBudgetItems() != null) {
+            // 先删除原有预算科目
+            projectBudgetItemMapper.deleteByProjectId(id);
+            
+            // 再添加新预算科目
+            if (!projectDTO.getBudgetItems().isEmpty()) {
+                List<ProjectBudgetItem> budgetItems = projectDTO.getBudgetItems().stream()
+                        .map(dto -> {
+                            ProjectBudgetItem item = new ProjectBudgetItem();
+                            item.setProjectId(id);
+                            item.setCategory(dto.getCategory());
+                            item.setAmount(dto.getAmount());
+                            item.setCreateBy(SecurityUtils.getCurrentUserId());
+                            item.setUpdateBy(SecurityUtils.getCurrentUserId());
+                            item.setDeleted(0);
+                            return item;
+                        })
+                        .collect(Collectors.toList());
+                projectBudgetItemMapper.batchInsert(budgetItems);
             }
         }
         
@@ -159,6 +284,9 @@ public class ProjectServiceImpl implements ProjectService {
         
         // 删除项目团队成员
         projectTeamMemberMapper.deleteByProjectId(id);
+        
+        // 删除项目预算科目
+        projectBudgetItemMapper.deleteByProjectId(id);
         
         // 逻辑删除项目
         projectMapper.deleteById(id);
@@ -362,6 +490,22 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public List<ProjectDTO> getProjectsByStatus(String status) {
         // 直接使用Mapper查询指定状态的项目
-        return projectMapper.selectByStatus(status);
+        List<ProjectDTO> projects = projectMapper.selectByStatus(status);
+        
+        // 为每个项目加载经费来源信息
+        for (ProjectDTO project : projects) {
+            // 查询项目经费来源
+            List<ProjectFundingSource> fundingSources = projectFundingSourceRepository.findByProjectId(project.getId());
+            if (fundingSources != null && !fundingSources.isEmpty()) {
+                project.setFundingSources(fundingSources.stream()
+                        .map(ProjectFundingSource::getSource)
+                        .collect(Collectors.toList()));
+            } else if (project.getFundingSource() != null) {
+                // 兼容旧数据，如果没有查到多个经费来源，但有单个经费来源，则将其转换为列表
+                project.setFundingSources(Collections.singletonList(project.getFundingSource()));
+            }
+        }
+        
+        return projects;
     }
 } 

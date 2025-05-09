@@ -24,7 +24,12 @@
         </el-form-item>
         
         <el-form-item label="所属项目" prop="projectId">
-          <el-select v-model="expenseForm.projectId" placeholder="请选择所属项目" style="width: 100%;">
+          <el-select 
+            v-model="expenseForm.projectId" 
+            placeholder="请选择所属项目" 
+            style="width: 100%;"
+            @change="handleProjectChange"
+          >
             <el-option 
               v-for="item in projectOptions" 
               :key="item.id" 
@@ -35,28 +40,52 @@
         </el-form-item>
         
         <el-form-item label="申请类型" prop="type">
-          <el-select v-model="expenseForm.type" placeholder="请选择申请类型" style="width: 100%;">
-            <el-option label="设备费" value="equipment" />
-            <el-option label="材料费" value="material" />
-            <el-option label="测试化验费" value="test" />
-            <el-option label="差旅费" value="travel" />
-            <el-option label="会议费" value="meeting" />
-            <el-option label="劳务费" value="labor" />
-            <el-option label="专家咨询费" value="consultation" />
-            <el-option label="其他费用" value="other" />
+          <el-select 
+            v-model="expenseForm.type" 
+            placeholder="请选择申请类型" 
+            style="width: 100%;"
+            :disabled="!expenseForm.projectId || budgetItems.length === 0"
+          >
+            <el-option 
+              v-for="item in budgetItems" 
+              :key="item.type" 
+              :label="`${item.category} - 剩余预算: ¥${Number(item.remainingAmount).toFixed(2)}`"
+              :value="item.type" 
+              :disabled="item.remainingAmount <= 0"
+            />
           </el-select>
+          <div v-if="expenseForm.projectId && budgetItems.length === 0" class="error-message">
+            该项目没有可用的预算科目，请选择其他项目或联系管理员
+          </div>
+          <div v-if="budgetItemSelected" class="budget-info">
+            该科目总预算: <strong>¥{{ selectedBudgetItem.budgetAmount.toFixed(2) }}</strong>，
+            已使用: <strong>¥{{ selectedBudgetItem.usedAmount.toFixed(2) }}</strong>，
+            剩余: <strong>¥{{ selectedBudgetItem.remainingAmount.toFixed(2) }}</strong>
+          </div>
         </el-form-item>
         
         <el-form-item label="申请金额" prop="amount">
           <el-input-number
             v-model="expenseForm.amount"
             :min="0"
+            :max="maxApplicableAmount"
             :precision="2"
             :step="500"
             :controls="false"
             style="width: 200px"
+            :disabled="!budgetItemSelected || projectTotalArrivedAmount <= 0"
           />
           <span class="form-tips">单位：元</span>
+          <div v-if="budgetItemSelected && projectTotalArrivedAmount > 0" class="max-amount-tip">
+            可申请最大金额: ¥{{ maxApplicableAmount.toFixed(2) }}
+            <div class="amount-detail">
+              (项目预算余额: ¥{{ selectedBudgetItem.remainingAmount.toFixed(2) }},
+              项目已到账金额: ¥{{ projectTotalArrivedAmount.toFixed(2) }})
+            </div>
+          </div>
+          <div v-else-if="budgetItemSelected && projectTotalArrivedAmount <= 0" class="error-message">
+            该项目尚未有资金到账，无法申请经费
+          </div>
         </el-form-item>
         
         <el-form-item label="申请日期" prop="applyDate">
@@ -121,12 +150,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/modules/user'
-import { getAvailableProjectsForExpense } from '@/api/project'
+import { getAvailableProjectsForExpense, getProjectBudgetItems } from '@/api/project'
 import { createExpense, uploadAttachment } from '@/api/expense'
+import { getProjectTotalArrivedAmount } from '@/api/projectFundArrival'
 // 这里需要导入实际的API
 // import { createExpenseApply } from '@/api/expense'
 // import { uploadFile } from '@/api/upload'
@@ -138,6 +168,8 @@ const expenseFormRef = ref(null)
 const submitLoading = ref(false)
 const fileList = ref([])
 const projectOptions = ref([]) // 项目选项列表
+const budgetItems = ref([]) // 项目预算科目列表
+const projectTotalArrivedAmount = ref(0) // 项目已到账总金额
 
 // 表单数据
 const expenseForm = reactive({
@@ -151,6 +183,66 @@ const expenseForm = reactive({
   attachments: [],
   category: 'advance'
 })
+
+// 选中的预算科目信息
+const selectedBudgetItem = computed(() => {
+  if (!expenseForm.type || budgetItems.value.length === 0) return null;
+  return budgetItems.value.find(item => item.type === expenseForm.type) || null;
+});
+
+// 是否选中了预算科目
+const budgetItemSelected = computed(() => selectedBudgetItem.value !== null);
+
+// 可申请的最大金额（取已到账金额和预算科目剩余额度的较小值）
+const maxApplicableAmount = computed(() => {
+  if (!budgetItemSelected.value) return 0;
+  
+  // 如果已到账金额为0，显示警告
+  if (projectTotalArrivedAmount.value <= 0) {
+    return 0;
+  }
+  
+  // 取预算科目剩余金额和已到账金额中的较小值
+  const budgetRemaining = selectedBudgetItem.value.remainingAmount || 0;
+  return Math.min(budgetRemaining, projectTotalArrivedAmount.value);
+});
+
+// 处理项目选择变更
+const handleProjectChange = async (projectId) => {
+  // 清空之前的数据
+  expenseForm.type = '';
+  expenseForm.amount = 0;
+  budgetItems.value = [];
+  projectTotalArrivedAmount.value = 0;
+  
+  if (!projectId) return;
+  
+  try {
+    // 获取项目已到账总金额
+    const totalAmountRes = await getProjectTotalArrivedAmount(projectId);
+    if (totalAmountRes.code === 200) {
+      projectTotalArrivedAmount.value = totalAmountRes.data || 0;
+      console.log('项目已到账金额:', projectTotalArrivedAmount.value);
+    } else {
+      ElMessage.warning('获取项目已到账金额失败, 将使用0作为默认值');
+      projectTotalArrivedAmount.value = 0;
+    }
+    
+    // 获取项目可用预算科目
+    const response = await getProjectBudgetItems(projectId);
+    if (response.code === 200) {
+      budgetItems.value = response.data || [];
+      if (budgetItems.value.length === 0) {
+        ElMessage.warning('该项目没有可用的预算科目，请选择其他项目或联系管理员');
+      }
+    } else {
+      ElMessage.error('获取项目预算科目失败: ' + (response.message || '未知错误'));
+    }
+  } catch (error) {
+    console.error('获取项目信息失败:', error);
+    ElMessage.error('获取项目信息失败: ' + (error.message || '未知错误'));
+  }
+}
 
 // 表单验证规则
 const rules = {
@@ -169,7 +261,37 @@ const rules = {
   ],
   amount: [
     { required: true, message: '请输入申请金额', trigger: 'blur' },
-    { type: 'number', min: 1, message: '金额必须大于0', trigger: 'blur' }
+    { type: 'number', min: 1, message: '金额必须大于0', trigger: 'blur' },
+    { 
+      validator: (rule, value, callback) => {
+        if (!budgetItemSelected.value) {
+          callback();
+          return;
+        }
+        
+        // 检查是否有到账金额
+        if (projectTotalArrivedAmount.value <= 0) {
+          callback(new Error('该项目尚未有资金到账，无法申请经费'));
+          return;
+        }
+        
+        // 检查申请金额是否超过了可用预算
+        if (value > selectedBudgetItem.value.remainingAmount) {
+          callback(new Error(`金额不能超过可用预算 ¥${selectedBudgetItem.value.remainingAmount.toFixed(2)}`));
+          return;
+        }
+        
+        // 检查申请金额是否超过了已到账金额
+        if (value > projectTotalArrivedAmount.value) {
+          callback(new Error(`金额不能超过项目已到账金额 ¥${projectTotalArrivedAmount.value.toFixed(2)}`));
+          return;
+        }
+        
+        // 通过验证
+        callback();
+      }, 
+      trigger: 'blur' 
+    }
   ],
   applyDate: [
     { required: true, message: '请选择申请日期', trigger: 'change' }
@@ -251,6 +373,18 @@ const submitForm = async () => {
   // 只有报销类型才需要检查附件
   if (expenseForm.category === 'reimbursement' && expenseForm.attachments.length === 0) {
     ElMessage.warning('报销申请需要上传至少一个附件');
+    return;
+  }
+  
+  // 检查项目是否有资金到账
+  if (projectTotalArrivedAmount.value <= 0) {
+    ElMessage.error('该项目尚未有资金到账，无法申请经费');
+    return;
+  }
+  
+  // 检查申请金额是否超过已到账金额
+  if (expenseForm.amount > projectTotalArrivedAmount.value) {
+    ElMessage.error(`申请金额不能超过项目已到账金额 ¥${projectTotalArrivedAmount.value.toFixed(2)}`);
     return;
   }
   
@@ -354,5 +488,30 @@ onMounted(() => {
 
 .upload-container {
   width: 100%;
+}
+
+.error-message {
+  color: #F56C6C;
+  font-size: 13px;
+  margin-top: 5px;
+}
+
+.budget-info {
+  margin-top: 8px;
+  color: #409EFF;
+  font-size: 13px;
+}
+
+.max-amount-tip {
+  color: #67C23A;
+  font-size: 13px;
+  margin-top: 5px;
+  font-weight: bold;
+}
+
+.amount-detail {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
 }
 </style> 

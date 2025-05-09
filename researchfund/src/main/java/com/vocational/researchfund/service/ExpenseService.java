@@ -3,6 +3,7 @@ package com.vocational.researchfund.service;
 import com.vocational.researchfund.dto.ExpenseDTO;
 import com.vocational.researchfund.dto.PageDTO;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -97,4 +98,11 @@ public interface ExpenseService {
      * 此方法由定时任务调用
      */
     void checkReceiptPendingExpenses();
+
+    /**
+     * 获取项目的经费支出列表
+     * @param projectId 项目ID
+     * @return 经费支出列表
+     */
+    List<ExpenseDTO> getExpensesByProjectId(Long projectId);
 } 

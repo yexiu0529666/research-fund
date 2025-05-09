@@ -28,7 +28,7 @@
             </el-menu-item>
           </el-sub-menu>
           
-          <!-- 项目管理：对所有用户可见 -->
+          <!-- 对所有用户可见 -->
           <el-sub-menu index="2">
             <template #title>
               <el-icon><Briefcase /></el-icon>
@@ -38,10 +38,20 @@
               项目列表
             </el-menu-item>
           </el-sub-menu>
-          
+
+          <el-sub-menu index="3">
+            <template #title>
+              <el-icon><DocumentChecked /></el-icon>
+              <span>经费到账管理</span>
+            </template>
+            <el-menu-item index="3-1" @click="handleMenuClick('/project/fund-arrival')">
+                到账列表
+            </el-menu-item>
+          </el-sub-menu>
+
           <!-- 管理员可见菜单 -->
           <template v-if="isAdmin">
-            <el-sub-menu index="3">
+            <el-sub-menu index="4">
               <template #title>
                 <el-icon><List /></el-icon>
                 <span>任务管理</span>
@@ -51,7 +61,7 @@
               </el-menu-item>
             </el-sub-menu>
             
-            <el-sub-menu index="4">
+            <el-sub-menu index="5">
               <template #title>
                 <el-icon><Trophy /></el-icon>
                 <span>奖励管理</span>
@@ -79,8 +89,8 @@
                 <el-icon><Money /></el-icon>
                 <span>经费管理</span>
               </template>
-              <el-menu-item index="5-1" @click="handleMenuClick('/expense/apply/list')">
-                经费申请列表
+              <el-menu-item index="5-2" @click="handleMenuClick('/expense/apply/list')">
+                经费支出列表
               </el-menu-item>
               <el-menu-item index="5-3" @click="handleMenuClick('/expense/transfer/list')">
                 经费结转列表

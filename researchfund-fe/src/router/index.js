@@ -102,7 +102,25 @@ const routes = [
         path: 'completion-audit/:id',
         name: 'ProjectCompletionAudit',
         component: () => import('@/views/project/completion-audit.vue'),
-        meta: { title: '结题审核', hidden: true }
+        meta: { title: '项目结题审核', hidden: true }
+      },
+      {
+        path: 'fund-arrival',
+        name: 'ProjectFundArrival',
+        component: () => import('@/views/project/fund-arrival/list.vue'),
+        meta: { 
+          title: '经费到账管理', 
+          icon: 'money',
+        }
+      },
+      {
+        path: 'fund-arrival/detail/:id',
+        name: 'ProjectFundArrivalDetail',
+        component: () => import('@/views/project/fund-arrival/detail.vue'),
+        meta: { 
+          title: '经费到账详情', 
+          hidden: true
+        }
       }
     ]
   },

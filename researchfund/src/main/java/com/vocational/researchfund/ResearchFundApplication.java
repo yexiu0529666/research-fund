@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
-@MapperScan("com.vocational.researchfund.mapper")
+@MapperScan({"com.vocational.researchfund.mapper", "com.vocational.researchfund.repository"})
 @EnableScheduling
 public class ResearchFundApplication {
 

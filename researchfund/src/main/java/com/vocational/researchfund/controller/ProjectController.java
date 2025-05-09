@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -267,5 +269,83 @@ public class ProjectController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Result.error(e.getMessage()));
         }
+    }
+
+    /**
+     * 获取项目可用预算科目列表
+     * 
+     * @param projectId 项目ID
+     * @return 项目预算科目列表及剩余预算
+     */
+    @GetMapping("/{projectId}/budget-items")
+    public ResponseEntity<Result<List<Map<String, Object>>>> getProjectBudgetItems(@PathVariable Long projectId) {
+        try {
+            // 获取项目详情，包含预算科目
+            ProjectDTO project = projectService.getProjectById(projectId);
+            if (project == null) {
+                return ResponseEntity.badRequest().body(Result.error("项目不存在"));
+            }
+            
+            // 获取项目的经费使用情况按类型统计
+            List<Map<String, Object>> expenseStats = expenseMapper.getExpenseStatsByProject(projectId);
+            Map<String, BigDecimal> usedAmountByType = new HashMap<>();
+            
+            // 将经费使用情况转换为Map便于查找
+            if (expenseStats != null) {
+                for (Map<String, Object> stat : expenseStats) {
+                    String type = (String) stat.get("type");
+                    BigDecimal amount = (BigDecimal) stat.get("amount");
+                    if (type != null && amount != null) {
+                        usedAmountByType.put(type, amount);
+                    }
+                }
+            }
+            
+            // 计算每个预算科目的剩余可用预算
+            List<Map<String, Object>> result = new ArrayList<>();
+            if (project.getBudgetItems() != null) {
+                for (ProjectDTO.BudgetItemDTO item : project.getBudgetItems()) {
+                    String category = transformCategoryToType(item.getCategory());
+                    BigDecimal budgetAmount = item.getAmount();
+                    BigDecimal usedAmount = usedAmountByType.getOrDefault(category, BigDecimal.ZERO);
+                    BigDecimal remainingAmount = budgetAmount.subtract(usedAmount);
+                    
+                    // 如果剩余预算大于0，则添加到可用列表
+                    if (remainingAmount.compareTo(BigDecimal.ZERO) > 0) {
+                        Map<String, Object> budgetItem = new HashMap<>();
+                        budgetItem.put("category", item.getCategory());
+                        budgetItem.put("type", category);
+                        budgetItem.put("budgetAmount", budgetAmount);
+                        budgetItem.put("usedAmount", usedAmount);
+                        budgetItem.put("remainingAmount", remainingAmount);
+                        result.add(budgetItem);
+                    }
+                }
+            }
+            
+            return ResponseEntity.ok(Result.success(result));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Result.error("获取项目预算科目失败: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * 将项目预算科目名称转换为经费申请类型
+     * 
+     * @param category 预算科目名称
+     * @return 对应的经费申请类型
+     */
+    private String transformCategoryToType(String category) {
+        Map<String, String> categoryTypeMap = new HashMap<>();
+        categoryTypeMap.put("设备费", "equipment");
+        categoryTypeMap.put("材料费", "material");
+        categoryTypeMap.put("测试化验费", "test");
+        categoryTypeMap.put("差旅费", "travel");
+        categoryTypeMap.put("会议费", "meeting");
+        categoryTypeMap.put("劳务费", "labor");
+        categoryTypeMap.put("专家咨询费", "consultation");
+        categoryTypeMap.put("其他费用", "other");
+        
+        return categoryTypeMap.getOrDefault(category, "other");
     }
 } 

@@ -194,4 +194,16 @@ export function auditProjectCompletion(id, auditStatus, comment) {
       comment
     }
   })
+}
+
+/**
+ * 获取项目可用预算科目列表
+ * @param {Number} projectId - 项目ID
+ * @returns {Promise}
+ */
+export function getProjectBudgetItems(projectId) {
+  return request({
+    url: `/api/projects/${projectId}/budget-items`,
+    method: 'get'
+  })
 } 

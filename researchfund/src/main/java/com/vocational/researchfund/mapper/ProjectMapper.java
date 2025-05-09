@@ -23,9 +23,9 @@ public interface ProjectMapper {
      * @param project 项目DTO
      * @return 影响行数
      */
-    @Insert("INSERT INTO project(name, type, leader_id, leader_name, start_date, end_date, " +
+    @Insert("INSERT INTO project(name, type, leader_id, leader_name, start_date, end_date, funding_source, " +
             "budget, used_budget, status, audit_status, description, research_content, expected_results, file_path) " +
-            "VALUES(#{name}, #{type}, #{leaderId}, #{leaderName}, #{startDate}, #{endDate}, " +
+            "VALUES(#{name}, #{type}, #{leaderId}, #{leaderName}, #{startDate}, #{endDate}, #{fundingSource}, " +
             "#{budget}, #{usedBudget}, #{status}, #{auditStatus}, #{description}, #{researchContent}, #{expectedResults}, #{filePath})")
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     int insert(ProjectDTO project);

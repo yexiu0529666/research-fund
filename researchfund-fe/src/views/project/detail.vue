@@ -31,12 +31,70 @@
               <el-descriptions-item label="项目类型">
                 <el-tag :type="getTypeTag(projectInfo.type)">{{ getTypeLabel(projectInfo.type) }}</el-tag>
               </el-descriptions-item>
+              <el-descriptions-item label="经费来源">
+                <!-- 显示多个经费来源 -->
+                <template v-if="projectInfo.fundingSources && projectInfo.fundingSources.length > 0">
+                  <el-tag 
+                    v-for="(source, index) in projectInfo.fundingSources" 
+                    :key="index"
+                    type="warning" 
+                    class="funding-source-tag">
+                    {{ getFundingSourceLabel(source) }}
+                  </el-tag>
+                </template>
+                <!-- 兼容旧版本，显示单个经费来源 -->
+                <template v-else>
+                  <el-tag type="warning">{{ getFundingSourceLabel(projectInfo.fundingSource) }}</el-tag>
+                </template>
+              </el-descriptions-item>
               <el-descriptions-item label="负责人">{{ projectInfo.leaderName }}</el-descriptions-item>
               <el-descriptions-item label="开始日期">{{ projectInfo.startDate }}</el-descriptions-item>
               <el-descriptions-item label="结束日期">{{ projectInfo.endDate }}</el-descriptions-item>
               <el-descriptions-item label="总预算">{{ formatCurrency(projectInfo.budget) }}</el-descriptions-item>
               <el-descriptions-item label="已用预算">{{ formatCurrency(projectInfo.usedBudget) }}</el-descriptions-item>
+              <el-descriptions-item label="总到账经费">{{ formatCurrency(totalArrivedAmount) }}</el-descriptions-item>
+              <el-descriptions-item label="未到账经费">{{ formatCurrency(projectInfo.budget - totalArrivedAmount) }}</el-descriptions-item>
             </el-descriptions>
+            
+            <!-- 预算科目明细 -->
+            <div class="budget-items-section" v-if="projectInfo.budgetItems && projectInfo.budgetItems.length">
+              <div class="section-title">预算科目明细</div>
+              <el-table :data="projectInfo.budgetItems" stripe style="width: 100%">
+                <el-table-column prop="category" label="科目名称" min-width="120">
+                  <template #default="scope">
+                    {{ scope.row.category }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="amount" label="预算金额" min-width="120">
+                  <template #default="scope">
+                    {{ formatCurrency(scope.row.amount) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="percentage" label="占比" min-width="120">
+                  <template #default="scope">
+                    {{ calculatePercentage(scope.row.amount, projectInfo.budget) }}%
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+            
+            <!-- 经费来源到账情况 -->
+            <div class="fund-arrival-section" v-if="fundArrivalStats.length > 0">
+              <div class="section-title">经费来源到账情况</div>
+              <el-table :data="fundArrivalStats" stripe style="width: 100%" v-loading="fundArrivalLoading">
+                <el-table-column prop="label" label="经费来源" min-width="120" />
+                <el-table-column prop="total_amount" label="到账金额" min-width="120">
+                  <template #default="scope">
+                    {{ formatCurrency(scope.row.total_amount) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="percentage" label="占比" min-width="120">
+                  <template #default="scope">
+                    {{ calculatePercentage(scope.row.total_amount, totalArrivedAmount) }}%
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
             
             <div class="status-tips" v-if="projectInfo.status === 'pending_completion'">
               <el-alert type="warning" :closable="false">
@@ -162,6 +220,49 @@
               </div>
             </div>
           </el-card>
+          
+          <!-- 经费支出详情 -->
+          <el-card class="detail-card">
+            <template #header>
+              <div class="card-header">
+                <span>经费支出详情</span>
+              </div>
+            </template>
+            
+            <div v-loading="expenseLoading">
+              <div v-if="expenseList.length > 0">
+                <el-table :data="expenseList" stripe style="width: 100%">
+                  <el-table-column prop="title" label="支出名称" min-width="120" show-overflow-tooltip />
+                  <el-table-column prop="type" label="支出类型" min-width="100">
+                    <template #default="scope">
+                      {{ getExpenseTypeLabel(scope.row.type) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="amount" label="金额" min-width="100">
+                    <template #default="scope">
+                      {{ formatCurrency(scope.row.amount) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="status" label="状态" min-width="100">
+                    <template #default="scope">
+                      <el-tag :type="getExpenseStatusType(scope.row.status)">
+                        {{ getExpenseStatusLabel(scope.row.status) }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="applyDate" label="申请日期" min-width="100" />
+                  <el-table-column label="操作" min-width="80">
+                    <template #default="scope">
+                      <el-button type="primary" link @click="viewExpenseDetail(scope.row.id)">
+                        查看
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+              <el-empty v-else description="暂无经费支出记录" :image-size="100"></el-empty>
+            </div>
+          </el-card>
         </el-col>
       </el-row>
     </div>
@@ -173,7 +274,9 @@ import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElLoading } from 'element-plus'
 import { getProjectDetail, getProjectExpenseStats } from '@/api/project'
+import { getExpenseByProject } from '@/api/expense'
 import { getFileDownloadUrl } from '@/api/upload'
+import { getProjectFundArrivalBySource, getProjectTotalArrivedAmount } from '@/api/projectFundArrival'
 import { Download, Warning, InfoFilled, CircleCheck } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { useUserStore } from '@/store/modules/user'
@@ -196,7 +299,7 @@ const canEdit = computed(() => {
   if (isAdmin.value) return false
   
   // 研究人员可以编辑项目
-  return userStore.roles.includes('ROLE_RESEARCHER')
+  return userStore.roles.includes('ROLE_RESEARCHER') && projectInfo.value.status == 'planning'
 })
 
 // 项目详情信息
@@ -221,11 +324,23 @@ const projectInfo = ref({
   completionReportPath: '',
   completionAuditStatus: '',
   completionAuditComment: '',
-  completionReportSubmitTime: ''
+  completionReportSubmitTime: '',
+  fundingSource: ''
 })
 
 // 项目经费使用统计数据
 const expenseStats = ref([])
+
+// 项目经费支出列表
+const expenseList = ref([])
+const expenseLoading = ref(false)
+
+// 经费到账统计数据
+const fundArrivalStats = ref([])
+const fundArrivalLoading = ref(false)
+
+// 项目总到账金额
+const totalArrivedAmount = ref(0)
 
 // 计算预算使用百分比
 const budgetPercentage = computed(() => {
@@ -269,14 +384,12 @@ const getTypeTag = (type) => {
 
 // 获取项目类型显示文本
 const getTypeLabel = (type) => {
-  const typeMap = {
-    'SCIENTIFIC': '科学研究',
-    'TECHNOLOGICAL': '技术开发',
-    'EDUCATIONAL': '教育项目',
-    'CULTURAL': '文化项目',
-    'OTHER': '其他'
+  const types = {
+    school: '校级项目',
+    horizontal: '横向项目',
+    vertical: '纵向项目'
   }
-  return typeMap[type] || '其他'
+  return types[type] || '其他'
 }
 
 // 获取状态标签样式
@@ -373,6 +486,12 @@ const fetchProjectDetail = async () => {
       // 获取项目经费使用统计
       fetchExpenseStats();
       
+      // 获取项目经费支出列表
+      fetchExpenseList();
+      
+      // 获取项目经费到账统计
+      fetchFundArrivalStats();
+      
     } else {
       ElMessage.error('获取项目详情失败: ' + (response.message || '未知错误'));
       loading.value = false;
@@ -407,6 +526,82 @@ const fetchExpenseStats = async () => {
     loading.value = false;
     chartLoading.value = false;
   }
+}
+
+// 获取项目经费支出列表
+const fetchExpenseList = async () => {
+  if (!projectId.value) return;
+  
+  expenseLoading.value = true;
+  
+  try {
+    const response = await getExpenseByProject(projectId.value);
+    
+    if (response.code === 200) {
+      expenseList.value = response.data || [];
+    } else {
+      console.warn('获取项目经费支出列表失败:', response.message || '未知错误');
+      expenseList.value = [];
+    }
+  } catch (error) {
+    console.error('获取项目经费支出列表失败:', error);
+    expenseList.value = [];
+  } finally {
+    expenseLoading.value = false;
+  }
+}
+
+// 查看经费支出详情
+const viewExpenseDetail = (id) => {
+  router.push(`/expense/apply/detail/${id}`);
+}
+
+// 获取经费支出状态标签样式
+const getExpenseStatusType = (status) => {
+  const statusMap = {
+    'pending': 'info',
+    'approved': 'success',
+    'rejected': 'danger',
+    'paid': 'success',
+    'receipt_pending': 'warning',
+    'repayment_pending': 'warning',
+    'receipt_audit': 'warning',
+    'completed': 'success',
+    'repaid': 'success'
+  }
+  return statusMap[status] || 'info'
+}
+
+// 获取经费支出状态显示文本
+const getExpenseStatusLabel = (status) => {
+  const statusMap = {
+    'pending': '待审核',
+    'approved': '已批准',
+    'rejected': '已拒绝',
+    'paid': '已支付',
+    'receipt_pending': '待提交报销凭证',
+    'repayment_pending': '负责人自行还款',
+    'receipt_audit': '报销凭证审核中',
+    'completed': '已完成',
+    'repaid': '已还款'
+  }
+  return statusMap[status] || '未知状态'
+}
+
+// 计算预算科目金额占总预算的百分比
+const calculatePercentage = (amount, total) => {
+  if (!total || total === 0) return 0
+  return ((amount / total) * 100).toFixed(1)
+}
+
+// 获取经费来源标签
+const getFundingSourceLabel = (source) => {
+  const sourceMap = {
+    'fiscal': '财政经费',
+    'school': '校配套经费',
+    'other': '其他经费'
+  }
+  return sourceMap[source] || '未知来源'
 }
 
 // 路由参数变化时重新获取项目详情
@@ -651,6 +846,35 @@ const getCompletionAuditStatusLabel = (status) => {
   }
   return statusMap[status] || '未知状态'
 }
+
+// 获取项目经费到账统计
+const fetchFundArrivalStats = async () => {
+  if (!projectId.value) return;
+  
+  fundArrivalLoading.value = true;
+  
+  try {
+    // 获取项目总到账金额
+    const totalRes = await getProjectTotalArrivedAmount(projectId.value);
+    if (totalRes.code === 200) {
+      totalArrivedAmount.value = totalRes.data || 0;
+    }
+    
+    // 获取项目各经费来源的到账金额统计
+    const response = await getProjectFundArrivalBySource(projectId.value);
+    if (response.code === 200) {
+      fundArrivalStats.value = response.data || [];
+    } else {
+      console.warn('获取项目经费到账统计失败:', response.message || '未知错误');
+      fundArrivalStats.value = [];
+    }
+  } catch (error) {
+    console.error('获取项目经费到账统计失败:', error);
+    fundArrivalStats.value = [];
+  } finally {
+    fundArrivalLoading.value = false;
+  }
+}
 </script>
 
 <style scoped>
@@ -758,6 +982,11 @@ const getCompletionAuditStatusLabel = (status) => {
   font-size: 13px;
 }
 
+.funding-source-tag {
+  margin-right: 5px;
+  margin-bottom: 5px;
+}
+
 .milestone-desc {
   font-size: 13px;
   color: #909399;
@@ -793,5 +1022,15 @@ const getCompletionAuditStatusLabel = (status) => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.fund-arrival-section {
+  margin-top: 20px;
+}
+
+.budget-items-section, .fund-arrival-section {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px dashed #ebeef5;
 }
 </style> 

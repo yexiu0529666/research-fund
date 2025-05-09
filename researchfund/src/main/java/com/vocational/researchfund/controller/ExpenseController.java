@@ -431,4 +431,20 @@ public class ExpenseController {
             return Result.error("审核报销凭证失败: " + e.getMessage());
         }
     }
+
+    /**
+     * 获取项目的经费支出列表
+     * 
+     * @param projectId 项目ID
+     * @return 经费支出列表
+     */
+    @GetMapping("/project")
+    public ResponseEntity<Result<List<ExpenseDTO>>> getExpensesByProject(@RequestParam Long projectId) {
+        try {
+            List<ExpenseDTO> expenses = expenseService.getExpensesByProjectId(projectId);
+            return ResponseEntity.ok(Result.success(expenses));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Result.error(e.getMessage()));
+        }
+    }
 } 
